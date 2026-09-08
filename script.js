@@ -1,4 +1,4 @@
-/* ===== OFFLINE DATA LAYER (no network calls) ===== */
+/* ===== OFFLINE DATA LAYER (localStorage — works as a plain file, no backend) ===== */
 const STORAGE_KEY = 'vending_stock_data_v1';
 let hasPersistence = false;
 
@@ -16,22 +16,22 @@ let products = [
   {id:4,category_id:3,name:'มาม่าต้มยำกุ้ง',stock:2,min_stock:5,expiry_date:'2026-07-20',price:8},
   {id:5,category_id:4,name:'ทิชชู่เปียก',stock:8,min_stock:3,expiry_date:null,price:15}
 ];
-let currentCatId=null,currentCatName='',editingProdId=null;
+let currentCatId=null,editingProdId=null,editingCatId=null;
 
 function nextId(list){ return list.length ? Math.max(...list.map(x=>x.id))+1 : 1; }
 
 async function loadData(){
   try{
-    const r = await window.storage.get(STORAGE_KEY);
-    if(r && r.value){
-      const d = JSON.parse(r.value);
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if(raw){
+      const d = JSON.parse(raw);
       if(d.categories) categories = d.categories;
       if(d.products) products = d.products;
     }
     hasPersistence = true;
     document.getElementById('hdr-status').textContent = 'OFFLINE • บันทึกอัตโนมัติ';
   }catch(e){
-    // No persistent storage available (e.g. opened as a plain file) — runs in-memory only for this session
+    // localStorage unavailable (e.g. some in-app browsers) — runs in-memory only for this session
     hasPersistence = false;
     document.getElementById('hdr-status').textContent = 'OFFLINE • ข้อมูลชั่วคราว';
   }
@@ -39,7 +39,7 @@ async function loadData(){
 async function saveData(){
   if(!hasPersistence) return;
   try{
-    await window.storage.set(STORAGE_KEY, JSON.stringify({categories,products}));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({categories,products}));
   }catch(e){ /* silently ignore — data still lives in memory for this session */ }
 }
 
@@ -62,7 +62,7 @@ function getAlerts(){
   return { low_stock: d.filter(p=>p.is_low && !p.is_expired), expiring: d.filter(p=>p.is_expired) };
 }
 
-/* ===== UI (unchanged behavior, now backed by local data) ===== */
+/* ===== UI ===== */
 let _tt;
 function toast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');clearTimeout(_tt);_tt=setTimeout(()=>t.classList.remove('show'),2000)}
 function showScreen(id){document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));document.getElementById(id).classList.add('active')}
@@ -72,7 +72,11 @@ async function goHome(){showScreen('screen-home');loadCategories();loadAlerts()}
 function loadCategories(){
   const cats = getCategoriesStats();
   const grid = document.getElementById('cat-grid');
-  grid.innerHTML = cats.map(c=>`<button class="cat-btn" onclick="goProducts(${c.id},'${c.name}','${c.icon}')"><span class="cat-icon">${c.icon}</span><span class="cat-name">${c.name}</span><span class="cat-count">${c.total} รายการ</span>${c.low_stock>0?`<span class="cat-warn">⚠ ใกล้หมด ${c.low_stock}</span>`:''}</button>`).join('');
+  if(!cats.length){grid.innerHTML='<div class="loading" style="grid-column:1/-1">ยังไม่มีหมวดหมู่ กด + เพิ่มหมวดหมู่</div>';return}
+  grid.innerHTML = cats.map(c=>`<div class="cat-btn" onclick="goProducts(${c.id})">
+    <button class="cat-edit-btn" onclick="event.stopPropagation();openEditCategoryModal(${c.id})">✏</button>
+    <span class="cat-icon">${c.icon}</span><span class="cat-name">${c.name}</span><span class="cat-count">${c.total} รายการ</span>${c.low_stock>0?`<span class="cat-warn">⚠ ใกล้หมด ${c.low_stock}</span>`:''}
+  </div>`).join('');
 }
 
 function loadAlerts(){
@@ -88,10 +92,12 @@ function loadAlerts(){
 }
 function toggleAlerts(){document.getElementById('alert-panel').classList.toggle('open')}
 
-async function goProducts(catId,catName,catIcon){
-  currentCatId=catId;currentCatName=catName;
-  document.getElementById('prod-eyebrow').textContent=catIcon+' '+catName;
-  document.getElementById('prod-title').innerHTML=catName+'<span> สต๊อก</span>';
+async function goProducts(catId){
+  const cat = categories.find(c=>c.id===catId);
+  if(!cat) return;
+  currentCatId=catId;
+  document.getElementById('prod-eyebrow').textContent=cat.icon+' '+cat.name;
+  document.getElementById('prod-title').innerHTML=cat.name+'<span> สต๊อก</span>';
   showScreen('screen-products');loadProducts();
 }
 
@@ -103,8 +109,8 @@ function loadProducts(){
     const cls = p.is_expired?'expired':p.is_low?'low':'';
     const numCls = p.stock===0?'critical':p.is_low?'low':'';
     const expCls = p.is_expired?'bad':p.expiry_date?'warn':'ok';
-    const expTxt = p.expiry_date?(p.is_expired?' หมดอายุ ':'️▶')+p.expiry_date:'—';
-    return `<div class="prod-card ${cls}" onclick="openEditModal(${JSON.stringify(p).replace(/"/g,'&quot;')})"><div class="prod-name">${p.name}</div><div class="prod-meta">฿${p.price} &nbsp;<span class="prod-exp ${expCls}">${expTxt}</span></div><div class="stock-ctrl"><button class="s-btn" onclick="event.stopPropagation();changeStock(${p.id},1)">＋</button><div class="stock-num ${numCls}">${p.stock}</div><button class="s-btn" onclick="event.stopPropagation();changeStock(${p.id},-1)">－</button></div></div>`;
+    const expTxt = p.expiry_date?(p.is_expired?' หมดอายุ ':'▶')+p.expiry_date:'—';
+    return `<div class="prod-card ${cls}" onclick="openEditModal(${p.id})"><div class="prod-name">${p.name}</div><div class="prod-meta">฿${p.price} &nbsp;<span class="prod-exp ${expCls}">${expTxt}</span></div><div class="stock-ctrl"><button class="s-btn" onclick="event.stopPropagation();changeStock(${p.id},1)">＋</button><div class="stock-num ${numCls}">${p.stock}</div><button class="s-btn" onclick="event.stopPropagation();changeStock(${p.id},-1)">－</button></div></div>`;
   }).join('');
 }
 
@@ -125,7 +131,9 @@ function openAddModal(){
   document.getElementById('f-min').value='3';document.getElementById('f-stock').value='0';
   document.getElementById('modal').classList.add('open');
 }
-function openEditModal(p){
+function openEditModal(pid){
+  const p = products.find(x=>x.id===pid);
+  if(!p) return;
   editingProdId=p.id;
   document.getElementById('modal-title').textContent='✏ แก้ไขสินค้า';
   document.getElementById('delete-row').style.display='flex';
@@ -163,10 +171,59 @@ async function saveProduct(){
 
 async function deleteProduct(){
   if(editingProdId==null) return;
+  if(!confirm('ยืนยันลบสินค้านี้?')) return;
   products = products.filter(p=>p.id!==editingProdId);
   await saveData();
   closeModal();loadProducts();loadAlerts();
   toast('🗑 ลบสินค้าแล้ว');
+}
+
+/* ===== Category CRUD ===== */
+function openAddCategoryModal(){
+  editingCatId=null;
+  document.getElementById('modal-cat-title').textContent='+ เพิ่มหมวดหมู่';
+  document.getElementById('delete-cat-row').style.display='none';
+  document.getElementById('fc-name').value='';
+  document.getElementById('fc-icon').value='';
+  document.getElementById('modal-cat').classList.add('open');
+}
+function openEditCategoryModal(cid){
+  const c = categories.find(x=>x.id===cid);
+  if(!c) return;
+  editingCatId=c.id;
+  document.getElementById('modal-cat-title').textContent='✏ แก้ไขหมวดหมู่';
+  document.getElementById('delete-cat-row').style.display='flex';
+  document.getElementById('fc-name').value=c.name;
+  document.getElementById('fc-icon').value=c.icon;
+  document.getElementById('modal-cat').classList.add('open');
+}
+function closeCatModal(){document.getElementById('modal-cat').classList.remove('open')}
+
+async function saveCategory(){
+  const name = document.getElementById('fc-name').value.trim();
+  const icon = document.getElementById('fc-icon').value.trim() || '📦';
+  if(!name){toast('⚠ กรุณาใส่ชื่อหมวดหมู่');return}
+  if(editingCatId){
+    const idx = categories.findIndex(c=>c.id===editingCatId);
+    if(idx>-1) categories[idx] = {...categories[idx], name, icon};
+    toast('✓ บันทึกแล้ว');
+  }else{
+    categories.push({id: nextId(categories), name, icon});
+    toast('✓ เพิ่มหมวดหมู่แล้ว');
+  }
+  await saveData();
+  closeCatModal();loadCategories();
+}
+
+async function deleteCategory(){
+  if(editingCatId==null) return;
+  const hasProducts = products.some(p=>p.category_id===editingCatId);
+  if(hasProducts){ toast('⚠ ลบสินค้าในหมวดนี้ก่อน'); return; }
+  if(!confirm('ยืนยันลบหมวดหมู่นี้?')) return;
+  categories = categories.filter(c=>c.id!==editingCatId);
+  await saveData();
+  closeCatModal();loadCategories();
+  toast('🗑 ลบหมวดหมู่แล้ว');
 }
 
 async function goSummary(){
@@ -184,7 +241,7 @@ async function goSummary(){
   box.innerHTML = `<div class="sum-total-box"><div class="sum-total-lbl">สต๊อกทั้งหมด</div><div class="sum-total-num">${total}</div><div style="font-size:10px;color:var(--muted);margin-top:4px;letter-spacing:2px">รายการ</div></div>${cards}`;
 }
 
-/* ===== Manual backup / restore (works with or without persistent storage) ===== */
+/* ===== Manual backup / restore ===== */
 function exportData(){
   const blob = new Blob([JSON.stringify({categories,products},null,2)], {type:'application/json'});
   const url = URL.createObjectURL(blob);
