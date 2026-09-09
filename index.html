@@ -7,7 +7,7 @@
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  
+
 <div class="screen active" id="screen-home">
   <header class="hdr">
     <div class="hdr-eye">OFFLINE MODE // POS-2087</div>
@@ -22,6 +22,7 @@
     </div>
     <div class="sec-lbl">หมวดหมู่สินค้า</div>
     <div class="cat-grid" id="cat-grid"><div class="loading" style="grid-column:1/-1">กำลังโหลด...</div></div>
+    <button class="add-cat-btn" onclick="openAddCategoryModal()">+ เพิ่มหมวดหมู่</button>
   </div>
   <div class="io-row">
     <button class="io-btn" onclick="exportData()">⭳ สำรองข้อมูล (JSON)</button>
@@ -51,6 +52,7 @@
   <button class="back-btn" onclick="goHome()">← กลับ</button>
   <div class="sum-content" id="sum-content"><div class="loading">กำลังโหลด...</div></div>
 </div>
+
 <div class="modal-bg" id="modal">
   <div class="modal">
     <div class="modal-title" id="modal-title">เพิ่มสินค้า</div>
@@ -64,11 +66,27 @@
       <button class="m-btn primary" onclick="saveProduct()">บันทึก</button>
     </div>
     <div class="modal-actions" id="delete-row" style="display:none">
-      <button class="m-btn" style="border-color:var(--red);color:var(--red)" onclick="deleteProduct()">🗑 ลบสินค้านี้</button>
+      <button class="m-btn danger" onclick="deleteProduct()">🗑 ลบสินค้านี้</button>
     </div>
   </div>
 </div>
+
+<div class="modal-bg" id="modal-cat">
+  <div class="modal">
+    <div class="modal-title" id="modal-cat-title">+ เพิ่มหมวดหมู่</div>
+    <div class="field"><label>ชื่อหมวดหมู่</label><input id="fc-name" type="text"/></div>
+    <div class="field"><label>ไอคอน (emoji)</label><input id="fc-icon" type="text" maxlength="4" placeholder="🥤"/></div>
+    <div class="modal-actions">
+      <button class="m-btn" onclick="closeCatModal()">ยกเลิก</button>
+      <button class="m-btn primary" onclick="saveCategory()">บันทึก</button>
+    </div>
+    <div class="modal-actions" id="delete-cat-row" style="display:none">
+      <button class="m-btn danger" onclick="deleteCategory()">🗑 ลบหมวดหมู่นี้</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
-<script src="script.js" de></script>
+<script src="script.js" defer></script>
 </body>
 </html>
